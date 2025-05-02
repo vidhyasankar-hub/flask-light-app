@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Light Intensity Detector</title>
+  <style>
+    video, canvas {
+      display: block;
+      max-width: 100%;
+      margin: 10px auto;
+    }
+    h2 {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>Live Light Signal Detection</h2>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" style="display: none;"></canvas>
+  <p id="result" style="text-align:center;"></p>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const result = document.getElementById('result');
+    const ctx = canvas.getContext('2d');
+
+    // Access the mobile rear camera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        alert("Camera access failed: " + err);
+      });
+
+    // Periodically capture a frame and send it to the server
+    setInterval(() => {
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (width && height) {
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(video, 0, 0, width, height);
+
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageData })
+        })
+        .then(res => res.json())
+        .then(data => {
+          result.textContent = 'Estimated Light Intensity: ' + data.intensity;
+        })
+        .catch(err => {
+          result.textContent = 'Error analyzing image';
+        });
+      }
+    }, 2000); // every 2 seconds
+  </script>
+</body>
+</html>
