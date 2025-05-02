@@ -1,8 +1,7 @@
-from flask import Flask, render_template, request, jsonify
-import base64
+from flask import Flask, render_template, request
 import cv2
 import numpy as np
-import re
+import base64
 
 app = Flask(__name__)
 
@@ -10,24 +9,23 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    data = request.get_json()
-    image_data = data['image']
+@app.route('/upload_frame', methods=['POST'])
+def upload_frame():
+    try:
+        data = request.get_json()
+        image_data = data['image'].split(',')[1]
+        image_bytes = base64.b64decode(image_data)
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    # Remove the data URL prefix
-    img_str = re.sub('^data:image/.+;base64,', '', image_data)
-    img_bytes = base64.b64decode(img_str)
+        # Example OpenCV processing (grayscale conversion)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Convert bytes to numpy array
-    np_arr = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-    # Convert to grayscale to compute light intensity
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    intensity = int(np.mean(gray))  # Average brightness
-
-    return jsonify({'intensity': intensity})
+        print("Received and processed a frame.")
+        return '', 204  # No content response
+    except Exception as e:
+        print("Error processing frame:", str(e))
+        return 'Error', 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
