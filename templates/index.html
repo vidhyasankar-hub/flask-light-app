@@ -11,26 +11,35 @@
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const context = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
 
-    // Ask for camera access
     navigator.mediaDevices.getUserMedia({ video: true })
       .then(stream => {
         video.srcObject = stream;
       })
       .catch(error => {
-        alert('Error accessing camera: ' + error.message);
+        alert('Camera access error: ' + error.message);
       });
 
-    // Send a frame to the server every 1 second
     setInterval(() => {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = canvas.toDataURL('image/jpeg');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-      fetch('/upload_frame', {
+      let total = 0;
+      for (let i = 0; i < frame.length; i += 4) {
+        const r = frame[i];
+        const g = frame[i + 1];
+        const b = frame[i + 2];
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        total += brightness;
+      }
+      const avgBrightness = total / (canvas.width * canvas.height);
+      const timestamp = Date.now();
+
+      fetch('/upload_data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData })
+        body: JSON.stringify({ brightness: avgBrightness, timestamp: timestamp })
       });
     }, 1000);
   </script>
