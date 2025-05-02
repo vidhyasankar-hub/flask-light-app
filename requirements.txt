@@ -2,3 +2,6 @@ flask
 numpy
 scipy
 gunicorn
+matplotlib
+pandas
+opencv-python-headless
