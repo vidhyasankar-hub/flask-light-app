@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Camera Test</title>
+  </head>
+  <body>
+    <h2>Camera Preview</h2>
+    <video autoplay playsinline width="320" height="240"></video>
+
+    <script>
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          document.querySelector('video').srcObject = stream;
+        })
+        .catch(err => {
+          alert("Camera error: " + err.message);
+        });
+    </script>
+  </body>
+</html>
