@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, render_template  # ✅ Added render_template
 import csv
 import os
 import matplotlib.pyplot as plt
@@ -13,6 +13,10 @@ if not os.path.exists(data_file):
     with open(data_file, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['timestamp', 'brightness'])
+
+@app.route('/')
+def index():
+    return render_template('index.html')  # ✅ Added to serve the main page
 
 @app.route('/upload_frame', methods=['POST'])
 def upload_frame():
