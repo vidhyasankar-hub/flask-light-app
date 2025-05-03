@@ -1,1 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Light Intensity Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #copyBtn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button id="copyBtn">Copy Code</button>
 
+    <h1>Live Light Intensity Detection</h1>
+
+    <label for="cameraSelect">Choose Camera:</label>
+    <select id="cameraSelect"></select>
+    <button id="startBtn">Start Camera</button>
+
+    <video id="video" autoplay playsinline width="320" height="240" style="display:none;"></video>
+    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+    <div id="brightnessLog"></div>
+
+    <h2>Intensity vs Time</h2>
+    <canvas id="intensityChart" width="400" height="200"></canvas>
+
+    <h2>Differential Equation</h2>
+    <p id="differentialEq">dy/dt = -ky</p>
+
+    <h2>Symbolic Solution</h2>
+    <p id="solution">y(t) = y₀ * e<sup>-kt</sup></p>
+
+    <h2>Download Results</h2>
+    <ul>
+        <li><a href="/download/data.csv" target="_blank">Download CSV</a></li>
+        <li><a href="/download/intensity_plot.png" target="_blank">Download Graph</a></li>
+        <li><a href="/download/equation.txt" target="_blank">Download Equation</a></li>
+        <li><a href="/download/solution.txt" target="_blank">Download Solution</a></li>
+    </ul>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const logDiv = document.getElementById('brightnessLog');
+        const chartCtx = document.getElementById('intensityChart').getContext('2d');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const startBtn = document.getElementById('startBtn');
+
+        let selectedDeviceId = null;
+        let stream;
+
+        const intensityData = {
+            labels: [],
+            datasets: [{
+                label: 'Brightness',
+                data: [],
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        };
+
+        const intensityChart = new Chart(chartCtx, {
+            type: 'line',
+            data: intensityData,
+            options: {
+                animation: false,
+                responsive: true,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time' },
+                        type: 'time',
+                        time: { unit: 'second' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Brightness' },
+                        beginAtZero: true,
+                        grid: { display: true }
+                    }
+                }
+            }
+        });
+
+        async function listCameras() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === 'videoinput');
+            cameraSelect.innerHTML = '';
+            videoDevices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+                cameraSelect.appendChild(option);
+            });
+        }
+
+        async function setupCamera(deviceId) {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: deviceId ? { exact: deviceId } : undefined }
+            });
+            video.srcObject = stream;
+            video.style.display = 'block';
+        }
+
+        function getBrightnessFromFrame() {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+            const data = frame.data;
+            let totalBrightness = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                totalBrightness += (r + g + b) / 3;
+            }
+            return totalBrightness / (data.length / 4);
+        }
+
+        function sendFrame() {
+            const brightness = getBrightnessFromFrame();
+            const timestamp = new Date().toISOString();
+            fetch('/upload_frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness, timestamp })
+            });
+
+            // Update log and chart
+            logDiv.innerHTML += `<p>Brightness: ${brightness.toFixed(2)} at ${timestamp}</p>`;
+            intensityData.labels.push(timestamp);
+            intensityData.datasets[0].data.push(brightness);
+            intensityChart.update();
+        }
+
+        startBtn.onclick = async () => {
+            selectedDeviceId = cameraSelect.value;
+            await setupCamera(selectedDeviceId);
+            setInterval(sendFrame, 1000);
+        };
+
+        window.onload = listCameras;
+
+        window.addEventListener('beforeunload', () => {
+            fetch('/generate_output', { method: 'POST' });
+        });
+
+        document.getElementById('copyBtn').onclick = async () => {
+            const html = document.documentElement.outerHTML;
+            await navigator.clipboard.writeText(html);
+            alert("Code copied to clipboard!");
+        };
+    </script>
+</body>
+</html>
