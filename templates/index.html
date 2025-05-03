@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Light Intensity Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 1em;
+      background: #f9f9f9;
+    }
+    video {
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 1em;
+      border: 2px solid #333;
+    }
+    canvas {
+      display: block;
+      margin-bottom: 1em;
+      border: 1px solid #ccc;
+    }
+    #graph {
+      width: 100%;
+      height: 300px;
+    }
+    #copyBtn {
+      float: right;
+      margin: 10px;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-bottom: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h2>Light Intensity Tracker</h2>
+
+  <button id="switchBtn">Switch Camera</button>
+  <video id="video" autoplay></video>
+  <canvas id="canvas"></canvas>
+
+  <div>
+    <label>Scale X: <input type="number" id="scaleX" value="1" step="0.1" /></label>
+    <label>Scale Y: <input type="number" id="scaleY" value="1" step="0.1" /></label>
+  </div>
+
+  <canvas id="graph" width="400" height="300"></canvas>
+
+  <h3>Differential Equation</h3>
+  <button id="copyBtn" onclick="copyEquation()">Copy Code</button>
+  <textarea id="equation" readonly></textarea>
+
+  <h3>Symbolic Solution</h3>
+  <textarea id="solution" readonly></textarea>
+
+  <h3>Download Outputs</h3>
+  <ul>
+    <li><a href="/download/intensity_plot.png" download>Download Intensity Graph (PNG)</a></li>
+    <li><a href="/download/equation.txt" download>Download Differential Equation (TXT)</a></li>
+    <li><a href="/download/solution.txt" download>Download Symbolic Solution (TXT)</a></li>
+    <li><a href="/download/data.csv" download>Download Data (CSV)</a></li>
+  </ul>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const graph = document.getElementById('graph');
+    const ctx = graph.getContext('2d');
+    const equationEl = document.getElementById('equation');
+    const solutionEl = document.getElementById('solution');
+    let useFrontCamera = false;
+    let stream = null;
+    let brightnessData = [];
+
+    function drawGraph() {
+      const scaleX = parseFloat(document.getElementById('scaleX').value);
+      const scaleY = parseFloat(document.getElementById('scaleY').value);
+      ctx.clearRect(0, 0, graph.width, graph.height);
+      if (brightnessData.length === 0) return;
+
+      // Draw graph
+      ctx.beginPath();
+      ctx.strokeStyle = "blue";
+      ctx.moveTo(0, graph.height - brightnessData[0] * scaleY);
+      brightnessData.forEach((val, i) => {
+        ctx.lineTo(i * scaleX, graph.height - val * scaleY);
+      });
+      ctx.stroke();
+
+      // Draw grid
+      ctx.beginPath();
+      ctx.strokeStyle = "#ccc";
+      for (let x = 0; x < graph.width; x += 50) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, graph.height);
+      }
+      for (let y = 0; y < graph.height; y += 50) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(graph.width, y);
+      }
+      ctx.stroke();
+    }
+
+    async function startCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: useFrontCamera ? 'user' : 'environment' }
+      });
+      video.srcObject = stream;
+    }
+
+    document.getElementById('switchBtn').onclick = () => {
+      useFrontCamera = !useFrontCamera;
+      startCamera();
+    };
+
+    function getBrightness(imageData) {
+      let sum = 0;
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const r = imageData.data[i];
+        const g = imageData.data[i + 1];
+        const b = imageData.data[i + 2];
+        sum += 0.299 * r + 0.587 * g + 0.114 * b;
+      }
+      return sum / (imageData.data.length / 4);
+    }
+
+    async function captureLoop() {
+      if (!video.videoWidth) {
+        requestAnimationFrame(captureLoop);
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx2d = canvas.getContext('2d');
+      ctx2d.drawImage(video, 0, 0);
+      const frame = ctx2d.getImageData(0, 0, canvas.width, canvas.height);
+      const brightness = getBrightness(frame);
+      brightnessData.push(brightness);
+      drawGraph();
+
+      const timestamp = new Date().toISOString();
+      fetch('/upload_frame', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp, brightness })
+      });
+
+      setTimeout(captureLoop, 1000);
+    }
+
+    window.onload = async () => {
+      await startCamera();
+      captureLoop();
+    };
+
+    window.onbeforeunload = () => {
+      navigator.sendBeacon('/generate_output');
+    };
+
+    function copyEquation() {
+      navigator.clipboard.writeText(equationEl.value);
+    }
+
+    // Auto-fetch symbolic output after short delay
+    setTimeout(() => {
+      fetch('/generate_output')
+        .then(res => res.json())
+        .then(() => {
+          fetch('/download/equation.txt')
+            .then(res => res.text())
+            .then(text => equationEl.value = text);
+          fetch('/download/solution.txt')
+            .then(res => res.text())
+            .then(text => solutionEl.value = text);
+        });
+    }, 10000);
+  </script>
+</body>
+</html>
