@@ -1,76 +1,72 @@
-from flask import Flask, render_template, request, jsonify, send_file
-import numpy as np
+from flask import Flask, request, jsonify, render_template
 import matplotlib.pyplot as plt
 import io
 import base64
-from scipy.integrate import odeint
+import numpy as np
+from datetime import datetime
+from sympy import symbols, Eq, dsolve, Function
+import os
 
 app = Flask(__name__)
-
 brightness_data = []
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/upload_data', methods=['POST'])
-def upload_data():
+@app.route('/upload_frame', methods=['POST'])
+def upload_frame():
     data = request.get_json()
     brightness = data.get('brightness')
     timestamp = data.get('timestamp')
-    
+
     if brightness is not None and timestamp is not None:
         print(f"Brightness: {brightness}, Timestamp: {timestamp}")
         brightness_data.append((timestamp, brightness))
-    
+
     return jsonify(status='success')
 
-@app.route('/graph')
-def show_graph():
+@app.route('/result')
+def result():
     if not brightness_data:
-        return 'No brightness data to plot.', 400
+        return "No data available yet."
 
-    # Sort data by timestamp
-    sorted_data = sorted(brightness_data, key=lambda x: x[0])
-    timestamps, intensities = zip(*sorted_data)
+    times = [datetime.fromisoformat(t[0]) for t in brightness_data]
+    brightness_values = [float(b[1]) for b in brightness_data]
     
-    # Normalize timestamps
-    t0 = timestamps[0]
-    times = [(t - t0) for t in timestamps]
+    # Normalize time
+    t_seconds = [(t - times[0]).total_seconds() for t in times]
 
-    # Solve differential equation (example: exponential decay model)
-    def model(I, t, k):
-        return -k * I
+    # Plot intensity vs time
+    plt.figure()
+    plt.plot(t_seconds, brightness_values, marker='o')
+    plt.title('Intensity vs Time')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Brightness')
+    plt.grid(True)
 
-    k = 0.1  # decay constant (you can tune this)
-    I0 = intensities[0]
-    solution = odeint(model, I0, times, args=(k,))
-    solution = [s[0] for s in solution]
+    # Save plot to buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.getvalue()).decode()
+    buf.close()
 
-    # Plotting
-    fig, ax = plt.subplots()
-    ax.plot(times, intensities, 'bo-', label='Measured Intensity')
-    ax.plot(times, solution, 'r--', label='ODE Fit: dI/dt = -kI')
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Intensity')
-    ax.set_title('Intensity vs Time')
-    ax.legend()
-    plt.tight_layout()
+    # Solve differential equation symbolically
+    t = symbols('t')
+    I = Function('I')
+    eq = Eq(I(t).diff(t), -0.1 * I(t))  # Example DE: dI/dt = -0.1*I
+    sol = dsolve(eq, I(t)).simplify()
 
-    # Save to BytesIO and encode to base64 for display
-    img_io = io.BytesIO()
-    plt.savefig(img_io, format='png')
-    img_io.seek(0)
-    encoded_img = base64.b64encode(img_io.read()).decode('utf-8')
-    plt.close(fig)
+    return f'''
+        <h2>Intensity vs Time Graph</h2>
+        <img src="data:image/png;base64,{image_base64}">
+        <h2>Differential Equation and Solution</h2>
+        <p>Equation: dI/dt = -0.1 * I</p>
+        <p>Solution: {sol}</p>
+        <br><a href="/">Back to live stream</a>
+    '''
 
-    html = f"""
-    <h2>Intensity vs Time</h2>
-    <img src="data:image/png;base64,{encoded_img}" alt="Graph">
-    <p>Differential Equation: dI/dt = -kI, with k = {k}</p>
-    """
-
-    return html
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Deployment settings
+port = int(os.environ.get("PORT", 5000))
+app.run(host="0.0.0.0", port=port)
