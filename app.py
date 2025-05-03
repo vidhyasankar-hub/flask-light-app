@@ -1,4 +1,5 @@
-from flask import Flask, request, send_file, jsonify, render_template, safe_join
+from flask import Flask, request, send_file, jsonify, render_template
+from werkzeug.utils import safe_join  # ✅ Correct import for safe_join
 import csv
 import os
 import matplotlib.pyplot as plt
