@@ -2,18 +2,65 @@
 <html>
 <head>
     <title>Light Intensity Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>Live Light Intensity Detection</h1>
+    
     <video id="video" autoplay playsinline width="320" height="240"></video>
     <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+    
     <div id="brightnessLog"></div>
+
+    <h2>Intensity vs Time Graph</h2>
+    <canvas id="intensityChart" width="400" height="200"></canvas>
+
+    <h2>Differential Equation</h2>
+    <p id="differentialEq">dy/dt = -ky (example form)</p>
+
+    <h2>Solution</h2>
+    <p id="solution">y(t) = y₀ * e^(-kt) (example solution)</p>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
         const logDiv = document.getElementById('brightnessLog');
+        const chartCtx = document.getElementById('intensityChart').getContext('2d');
+
+        const intensityData = {
+            labels: [],
+            datasets: [{
+                label: 'Brightness',
+                data: [],
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        };
+
+        const intensityChart = new Chart(chartCtx, {
+            type: 'line',
+            data: intensityData,
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Brightness'
+                        }
+                    }
+                }
+            }
+        });
 
         async function setupCamera() {
             try {
@@ -42,18 +89,25 @@
         function sendFrame() {
             const brightness = getBrightnessFromFrame();
             const timestamp = new Date().toISOString();
+
+            // Send data to server
             fetch('/upload_frame', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ brightness: brightness, timestamp: timestamp })
             });
 
-            // Show brightness on page
+            // Log and update chart
             logDiv.innerHTML += `<p>Brightness: ${brightness.toFixed(2)} at ${timestamp}</p>`;
+
+            // Add to chart
+            intensityData.labels.push(timestamp);
+            intensityData.datasets[0].data.push(brightness);
+            intensityChart.update();
         }
 
         setupCamera().then(() => {
-            setInterval(sendFrame, 1000); // Send every 1 second
+            setInterval(sendFrame, 1000); // Every 1 second
         });
     </script>
 </body>
