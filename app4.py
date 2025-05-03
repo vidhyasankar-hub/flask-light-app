@@ -16,7 +16,7 @@ if not os.path.exists(data_file):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index4.html')  # Updated to use index4.html
 
 @app.route('/upload_frame', methods=['POST'])
 def upload_frame():
