@@ -54,6 +54,15 @@
   <h3>Symbolic Solution</h3>
   <textarea id="solution" readonly></textarea>
 
+  <!-- Add this inside <body>, after the Symbolic Solution section -->
+  <h3>Download Outputs</h3>
+  <ul>
+    <li><a href="/download/intensity_plot.png" download>Download Intensity Graph (PNG)</a></li>
+    <li><a href="/download/equation.txt" download>Download Differential Equation (TXT)</a></li>
+    <li><a href="/download/solution.txt" download>Download Symbolic Solution (TXT)</a></li>
+    <li><a href="/download/data.csv" download>Download Data (CSV)</a></li>
+  </ul>
+
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
@@ -69,6 +78,7 @@
       const scaleX = parseFloat(document.getElementById('scaleX').value);
       const scaleY = parseFloat(document.getElementById('scaleY').value);
       ctx.clearRect(0, 0, graph.width, graph.height);
+      if (brightnessData.length === 0) return;
       ctx.beginPath();
       ctx.strokeStyle = "blue";
       ctx.moveTo(0, graph.height - brightnessData[0] * scaleY);
@@ -76,6 +86,7 @@
         ctx.lineTo(i * scaleX, graph.height - val * scaleY);
       });
       ctx.stroke();
+
       ctx.beginPath();
       ctx.strokeStyle = "#ccc";
       for (let x = 0; x < graph.width; x += 50) {
