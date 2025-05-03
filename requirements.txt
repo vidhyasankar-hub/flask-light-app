@@ -6,3 +6,4 @@ matplotlib
 pandas
 opencv-python-headless
 requests
+sympy
