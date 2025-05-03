@@ -1,47 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Live Camera Feed</title>
+    <title>Light Intensity Detection</title>
 </head>
 <body>
-  <h2>Live Camera Stream</h2>
-  <video id="video" width="320" height="240" autoplay></video>
-  <canvas id="canvas" width="320" height="240" style="display: none;"></canvas>
+    <h1>Live Light Intensity Detection</h1>
+    <video id="video" autoplay playsinline width="320" height="240"></video>
+    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+    <div id="brightnessLog"></div>
 
-  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const logDiv = document.getElementById('brightnessLog');
 
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
-        video.srcObject = stream;
-      })
-      .catch(error => {
-        alert('Camera access error: ' + error.message);
-      });
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Camera access denied or not available.");
+            }
+        }
 
-    setInterval(() => {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        function getBrightnessFromFrame() {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+            const data = frame.data;
+            let totalBrightness = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const brightness = (r + g + b) / 3;
+                totalBrightness += brightness;
+            }
+            return totalBrightness / (data.length / 4);
+        }
 
-      let total = 0;
-      for (let i = 0; i < frame.length; i += 4) {
-        const r = frame[i];
-        const g = frame[i + 1];
-        const b = frame[i + 2];
-        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-        total += brightness;
-      }
-      const avgBrightness = total / (canvas.width * canvas.height);
-      const timestamp = Date.now();
+        function sendFrame() {
+            const brightness = getBrightnessFromFrame();
+            const timestamp = new Date().toISOString();
+            fetch('/upload_frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: brightness, timestamp: timestamp })
+            });
 
-      fetch('/upload_data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brightness: avgBrightness, timestamp: timestamp })
-      });
-    }, 1000);
-  </script>
+            // Show brightness on page
+            logDiv.innerHTML += `<p>Brightness: ${brightness.toFixed(2)} at ${timestamp}</p>`;
+        }
+
+        setupCamera().then(() => {
+            setInterval(sendFrame, 1000); // Send every 1 second
+        });
+    </script>
 </body>
 </html>
