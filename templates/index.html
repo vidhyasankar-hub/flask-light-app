@@ -1,20 +1,118 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Camera Test</title>
-  </head>
-  <body>
-    <h2>Camera Preview</h2>
-    <video autoplay playsinline width="320" height="240"></video>
+<head>
+    <title>Light Intensity Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Live Light Intensity Detection</h1>
+
+    <video id="video" autoplay playsinline width="320" height="240"></video>
+    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+    <div id="brightnessLog"></div>
+
+    <h2>Intensity vs Time Graph</h2>
+    <canvas id="intensityChart" width="400" height="200"></canvas>
+
+    <h2>Differential Equation</h2>
+    <p id="differentialEq">dy/dt = -ky (example)</p>
+
+    <h2>Solution</h2>
+    <p id="solution">y(t) = y₀ * e<sup>-kt</sup></p>
 
     <script>
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          document.querySelector('video').srcObject = stream;
-        })
-        .catch(err => {
-          alert("Camera error: " + err.message);
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const logDiv = document.getElementById('brightnessLog');
+        const chartCtx = document.getElementById('intensityChart').getContext('2d');
+
+        const intensityData = {
+            labels: [],
+            datasets: [{
+                label: 'Brightness',
+                data: [],
+                fill: false,
+                borderColor: 'blue',
+                tension: 0.1
+            }]
+        };
+
+        const intensityChart = new Chart(chartCtx, {
+            type: 'line',
+            data: intensityData,
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second',
+                            tooltipFormat: 'HH:mm:ss'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Brightness'
+                        }
+                    }
+                }
+            }
+        });
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+            } catch (error) {
+                alert("Camera access error: " + error.message);
+            }
+        }
+
+        function getBrightnessFromFrame() {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+            const data = frame.data;
+            let total = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i+1], b = data[i+2];
+                total += (r + g + b) / 3;
+            }
+            return total / (data.length / 4);
+        }
+
+        function sendFrame() {
+            const brightness = getBrightnessFromFrame();
+            const timestamp = new Date().toISOString();
+
+            // Log
+            logDiv.innerHTML += `<p>Brightness: ${brightness.toFixed(2)} at ${timestamp}</p>`;
+
+            // Update chart
+            intensityData.labels.push(timestamp);
+            intensityData.datasets[0].data.push(brightness);
+            intensityChart.update();
+
+            // Send to backend (optional)
+            fetch('/upload_frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness, timestamp })
+            }).catch(err => {
+                console.warn("Upload failed:", err.message);
+            });
+        }
+
+        setupCamera().then(() => {
+            setInterval(sendFrame, 1000); // capture every 1 second
         });
     </script>
-  </body>
+</body>
 </html>
