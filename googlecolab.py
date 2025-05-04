@@ -1,76 +1,31 @@
-# @title Refactored app4.py for Google Colab (with Drive support) { display-mode: "form" }
-# Mount Google Drive
-from google.colab import drive
-drive.mount('/content/drive')
 
-# Setup paths
-import csv
+# @title Upload index5.html and Serve It with Camera Access {display-mode: "form"}
+
+# Step 1: Upload the file
+from google.colab import files
+uploaded = files.upload()
+
+# Step 2: Start a simple HTTP server to serve index5.html
 import os
-import matplotlib.pyplot as plt
-import sympy as sp
-from datetime import datetime
+import threading
+import socketserver
+from http.server import SimpleHTTPRequestHandler
 
-drive_path = '/content/drive/MyDrive/LightIntensityProject'
-os.makedirs(drive_path, exist_ok=True)
+# Serve from current working directory
+os.chdir('/content')
 
-data_file = os.path.join(drive_path, 'data.csv')
+# Function to start HTTP server in a thread
+def start_server(port=8000):
+    handler = SimpleHTTPRequestHandler
+    httpd = socketserver.TCPServer(("", port), handler)
+    thread = threading.Thread(target=httpd.serve_forever)
+    thread.daemon = True
+    thread.start()
+    print(f"Server started at http://localhost:{port}")
 
-# Initialize CSV file
-if not os.path.exists(data_file):
-    with open(data_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['timestamp', 'brightness'])
+start_server(8000)
 
-print(f"Data will be stored in: {data_file}")
-
-# Function to log a brightness frame
-def log_frame(timestamp, brightness):
-    with open(data_file, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([timestamp, brightness])
-    print(f"Logged: {timestamp}, {brightness}")
-
-# Function to generate output graph and symbolic solution
-def generate_output():
-    times, brightnesses = [], []
-
-    with open(data_file, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            times.append(datetime.fromisoformat(row['timestamp']))
-            brightnesses.append(float(row['brightness']))
-
-    if times and brightnesses:
-        # Plot graph
-        plt.figure(figsize=(10, 5))
-        plt.plot(times, brightnesses, label='Brightness', color='teal')
-        plt.xlabel('Time')
-        plt.ylabel('Brightness')
-        plt.title('Intensity vs Time')
-        plt.grid(True)
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-
-        graph_path = os.path.join(drive_path, 'intensity_plot.png')
-        plt.savefig(graph_path)
-        plt.close()
-        print(f"Graph saved to: {graph_path}")
-
-    # Symbolic differential equation
-    t, y, k = sp.symbols('t y k')
-    eq = sp.Eq(sp.Derivative(y, t), -k * y)
-    sol = sp.dsolve(eq, y)
-
-    with open(os.path.join(drive_path, 'equation.txt'), 'w') as f:
-        f.write(f"Differential Equation:\n{str(eq)}\n")
-
-    with open(os.path.join(drive_path, 'solution.txt'), 'w') as f:
-        f.write(f"Symbolic Solution:\n{str(sol)}\n")
-
-    print("Equation and solution saved in Google Drive.")
-
-# Example usage: log one data point (you can modify or call this from HTML/js via Colab forms or APIs)
-# log_frame(datetime.now().isoformat(), 130.7)
-
-# To manually run after data collection:
-# generate_output()
+# Step 3: Show public link (for camera access, open in a new browser tab)
+from IPython.display import display, HTML
+public_link = "http://localhost:8000/index5.html"
+display(HTML(f'<a href="{public_link}" target="_blank" style="font-size:18px;color:blue;">Click here to open index5.html (camera access)</a>'))
